@@ -28,9 +28,13 @@ import time
 rotatechange = 0.1
 speedchange = 0.05
 occ_bins = [-1, 0, 100, 101]
-stop_distance = 0.5
+distance_to_stop = 0.4
 front_angle = 1
-front_angles = range(-front_angle,front_angle+1,1)
+#front_angles = range(-front_angle,front_angle+1,1)
+back_angle = 180
+#back_angles = range(-back_angle,back_angle+1,1)
+left= 1
+right= -1
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
 
@@ -59,6 +63,10 @@ def euler_from_quaternion(x, y, z, w):
 
 class AutoNav(Node):
 
+
+    ##############################################################################
+    ########Basic initialisastion (Initialisation and callback functions) ########
+    ##############################################################################
     def __init__(self):
         super().__init__('auto_nav')
         
@@ -99,7 +107,6 @@ class AutoNav(Node):
         self.lri= 5
 
 
-
     def odom_callback(self, msg):
         # self.get_logger().info('In odom_callback')
         orientation_quat =  msg.pose.pose.orientation
@@ -137,8 +144,12 @@ class AutoNav(Node):
 
 
 
+    ####################################################
+    ########Basic functions (Move, stop, rotate)########
+    ####################################################
+
     # function to rotate the TurtleBot
-    def rotatebot(self, rot_angle):
+    def rotatebot(self, rot_angle, turn_direction):
         # self.get_logger().info('In rotatebot')
         # create Twist object
         twist = Twist()
@@ -162,7 +173,7 @@ class AutoNav(Node):
         # set linear speed to zero so the TurtleBot rotates on the spot
         twist.linear.x = 0.0
         # set the direction to rotate
-        twist.angular.z = c_change_dir * rotatechange
+        twist.angular.z = c_change_dir * rotatechange * turn_direction
         # start rotation
         self.publisher_.publish(twist)
 
@@ -200,10 +211,10 @@ class AutoNav(Node):
         self.publisher_.publish(twist)
         self.get_logger().info('Robot has reached destination')
 
-    def forward(self):
+    def speed(self, move_speed):
         # start moving
         twist = Twist()
-        twist.linear.x = speedchange
+        twist.linear.x = move_speed
         twist.angular.z = 0.0
         # not sure if this is really necessary, but things seem to work more
         # reliably with this
@@ -211,7 +222,8 @@ class AutoNav(Node):
         self.publisher_.publish(twist)
 
 
-    def move_front(self):
+    def move_front(self, stop_distance):
+
         if self.laser_range.size != 0:
             # # check distances in front of TurtleBot and find values less than stop_distance
             # lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
@@ -222,31 +234,131 @@ class AutoNav(Node):
                 rclpy.spin_once(self)
                 front_dist= self.laser_range[front_angle]
                 print('Front distance: '+str(front_dist))
-                self.forward()
+                self.speed(speedchange)
+            
+            self.stopbot()  
+
+    def move_back(self, stop_distance):
+
+        if self.laser_range.size != 0:
+            # # check distances in front of TurtleBot and find values less than stop_distance
+            # lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
+            back_dist= self.laser_range[back_angle]
+        
+            while back_dist>stop_distance:
+                # allow the callback functions to run
+                rclpy.spin_once(self)
+                back_dist= self.laser_range[back_angle]
+                print('Back distance: '+str(back_dist))
+                self.speed(-speedchange)
             
             self.stopbot()  
 
 
+
+    ############################################################
+    ######## Table orders (Delivery to specific tables) ########
+    ############################################################
+
     def table1(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_front()
-            self.rotatebot(180)
-            self.move_front()
-            rclpy.shutdown()
+            self.move_front(distance_to_stop)
+            self.move_back(distance_to_stop)
+            rclpy.shutdown() #Placeholder for now
+
+    
+    def table2(self):
+        if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.move_front(distance_to_stop)
+            self.rotatebot(90, right)
+            self.move_front(1.22)
+            self.move_back(0.5)
+            self.rotatebot(90, left)
+            self.move_back(distance_to_stop)
+            rclpy.shutdown() #Placeholder for now
+
+    
+    def table3(self):
+        if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.move_front(1.5)
+            self.rotatebot(90, right)
+            self.move_front(2.06)
+            self.move_back(0.5)
+            self.rotatebot(90, left)
+            self.move_back(distance_to_stop)
+            rclpy.shutdown() #Placeholder for now
+
+    def table4(self):
+        if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.move_front(1.5)
+            self.rotatebot(90, right)
+            self.move_front(1.26)
+            self.move_back(0.5)
+            self.rotatebot(90, left)
+            self.move_back(distance_to_stop)
+            rclpy.shutdown() #Placeholder for now
+
+    
+    def table5(self):
+        if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.move_front(1.6)
+            self.rotatebot(90, right)
+            self.move_front(0.42)
+            self.rotatebot(90, left)
+            self.move_front(distance_to_stop)
+            self.move_back(0.70)
+            self.rotatebot(90, right)
+            self.move_back(0.5)
+            self.rotatebot(90, left)
+            self.move_back(distance_to_stop)
+            rclpy.shutdown() #Placeholder for now
+
+    def table6(self):
+        if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.move_front(0.5)
+            self.rotatebot(90,right)
+            self.move_front(0.4)
+            self.rotatebot(90,left)
+            self.move_front(0.84)
+            self.rotatebot(90,left)
+            #### Code to find the table ###
+            if self.laser_range[front_angle]<2.0: #Stops in the event table is detected early, doesnt stop in middle of box
+                self.move_front(distance_to_stop)
+                self.move_back(0.5)
+            else:   # Else moves to middle of the square bounds
+                self.move_front(0.84)
+                self.move_back(0.5)
+            #######################################
+            self.rotatebot(90,right)
+            self.move_back(0.5)
+            self.rotatebot(90, right)
+            self.move_back(0.5)
+            self.rotatebot(90, left)
+            self.move_back(distance_to_stop)
+            rclpy.shutdown() #Placeholder for now
 
         
+    def select_table(self):
+        table_number_dict= {'1':self.table1, '2':self.table2, '3':self.table3, \
+                            '4':self.table4, '5':self.table5, '6':self.table6}
+        # table_number_dict= {'1':'table1', '2':'table2', '3':'table3', \
+        #                     '4':'table4', '5':'table5', '6':'table6'}
+        desired_table_number= input('Input desired table: ')
+        relevant_nav_function= table_number_dict.get(desired_table_number)
+        if relevant_nav_function is not None:
+            print('yay')
+            #relevant_nav_function()
+
+
+    ###################################################################
+    ######## Mover functions (Function that is called in main) ########
+    ###################################################################
     def mover(self):
         try:
             self.stopbot()
-            #self.forward()
 
             while rclpy.ok():
-                self.table1()
-
-                
-                # self.get_logger().info('Start moving')
-                # self.table1()
-                
+                self.select_table()
                     
                 # allow the callback functions to run
                 rclpy.spin_once(self)
