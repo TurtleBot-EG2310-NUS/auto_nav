@@ -19,6 +19,7 @@ from geometry_msgs.msg import Twist
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
+from std_msgs.msg import String #Placeholder for snap-action switch
 import numpy as np
 import math
 import cmath
@@ -26,9 +27,9 @@ import time
 
 # constants
 rotatechange = 0.1
-speedchange = 0.05
+speedchange = -0.05
 occ_bins = [-1, 0, 100, 101]
-distance_to_stop = 0.4
+distance_to_stop = 0.5
 front_angle = 1
 #front_angles = range(-front_angle,front_angle+1,1)
 back_angle = 180
@@ -106,6 +107,34 @@ class AutoNav(Node):
         self.laser_range = np.array([])
         self.lri= 5
 
+
+    ######## Placeholder for the snap action switch topic ############
+        # self.actionswitch_subscription= self.create_subscription(
+        #     String,
+        #     'topic',
+        #     self.snapaction_callback,
+        #     10)
+        # self.actionswitch_subscription # prevent unused variable warning
+        # self.placeholder_value=0
+
+        self.tablenumber_subscription= self.create_subscription(
+            String,
+            'table',
+            self.tablenumber_callback,
+            10)
+        self.tablenumber_subscription
+        self.chosen_table=0
+
+    # def snapaction_callback(self,msg):
+    #     if msg.data is not None:
+    #         self.placeholder_value=1
+    #     else:
+    #         self.placeholder_value=0
+
+    def tablenumber_callback(self, msg):
+        self.chosen_table= msg.data
+
+    ##################################################################
 
     def odom_callback(self, msg):
         # self.get_logger().info('In odom_callback')
@@ -209,7 +238,7 @@ class AutoNav(Node):
         twist.angular.z = 0.0
         # time.sleep(1)
         self.publisher_.publish(twist)
-        self.get_logger().info('Robot has reached destination')
+        #self.get_logger().info('Robot has reached destination')
 
     def speed(self, move_speed):
         # start moving
@@ -228,6 +257,7 @@ class AutoNav(Node):
             # # check distances in front of TurtleBot and find values less than stop_distance
             # lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
             front_dist= self.laser_range[front_angle]
+            front_dist= ((stop_distance+0.10) if front_dist=='nan' else front_dist) #Deals with NaN values, cause I am lazy to search the proper filter
         
             while front_dist>stop_distance:
                 # allow the callback functions to run
@@ -244,6 +274,8 @@ class AutoNav(Node):
             # # check distances in front of TurtleBot and find values less than stop_distance
             # lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
             back_dist= self.laser_range[back_angle]
+            back_dist= ((stop_distance+0.10) if back_dist=='nan' else back_dist) #Deals with NaN values, cause I am lazy to search the proper filter
+
         
             while back_dist>stop_distance:
                 # allow the callback functions to run
@@ -264,7 +296,7 @@ class AutoNav(Node):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.move_front(distance_to_stop)
             self.move_back(distance_to_stop)
-            rclpy.shutdown() #Placeholder for now
+            self.docking()
 
     
     def table2(self):
@@ -275,7 +307,7 @@ class AutoNav(Node):
             self.move_back(0.5)
             self.rotatebot(90, left)
             self.move_back(distance_to_stop)
-            rclpy.shutdown() #Placeholder for now
+            self.docking()
 
     
     def table3(self):
@@ -286,7 +318,7 @@ class AutoNav(Node):
             self.move_back(0.5)
             self.rotatebot(90, left)
             self.move_back(distance_to_stop)
-            rclpy.shutdown() #Placeholder for now
+            self.docking()
 
     def table4(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
@@ -296,7 +328,7 @@ class AutoNav(Node):
             self.move_back(0.5)
             self.rotatebot(90, left)
             self.move_back(distance_to_stop)
-            rclpy.shutdown() #Placeholder for now
+            self.docking()
 
     
     def table5(self):
@@ -311,7 +343,7 @@ class AutoNav(Node):
             self.move_back(0.5)
             self.rotatebot(90, left)
             self.move_back(distance_to_stop)
-            rclpy.shutdown() #Placeholder for now
+            self.docking()
 
     def table6(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
@@ -335,19 +367,28 @@ class AutoNav(Node):
             self.move_back(0.5)
             self.rotatebot(90, left)
             self.move_back(distance_to_stop)
-            rclpy.shutdown() #Placeholder for now
+            self.docking()
 
-        
+    def docking(self):
+        self.chosen_table=0
+        rclpy.shutdown() #Placeholder for now
+        #self.speed(-speedchange)
+
+
     def select_table(self):
-        table_number_dict= {'1':self.table1, '2':self.table2, '3':self.table3, \
-                            '4':self.table4, '5':self.table5, '6':self.table6}
-        # table_number_dict= {'1':'table1', '2':'table2', '3':'table3', \
-        #                     '4':'table4', '5':'table5', '6':'table6'}
-        desired_table_number= input('Input desired table: ')
-        relevant_nav_function= table_number_dict.get(desired_table_number)
-        if relevant_nav_function is not None:
-            print('yay')
-            #relevant_nav_function()
+        if self.chosen_table==0:
+            print("no input")
+        # else:
+        #     print(self.chosen_table)
+        #     rclpy.shutdown()
+
+        # if self.chosen_table==0:
+        #     self.stopbot()
+        else:
+            table_number_dict= {'1':self.table1, '2':self.table2, '3':self.table3, \
+                                '4':self.table4, '5':self.table5, '6':self.table6}
+            relevant_nav_function= table_number_dict.get(self.chosen_table)
+            relevant_nav_function()
 
 
     ###################################################################
@@ -359,7 +400,8 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 self.select_table()
-                    
+                #self.table1()  
+                #self.docking()
                 # allow the callback functions to run
                 rclpy.spin_once(self)
 
