@@ -1,3 +1,4 @@
+
 # Copyright 2016 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,20 +25,22 @@ import numpy as np
 import math
 import cmath
 import time
+import pandas as pd
 
 # constants
 rotatechange = 0.1
 speedchange = -0.05
 occ_bins = [-1, 0, 100, 101]
 distance_to_stop = 0.5
-front_angle = 1
-#front_angles = range(-front_angle,front_angle+1,1)
-back_angle = 180
-#back_angles = range(-back_angle,back_angle+1,1)
+front_angles = range(-2,3,1)
+back_angles = range(178,183,1)
+placeholder_value= 5
 left= 1
 right= -1
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
+
+ 
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -122,17 +125,18 @@ class AutoNav(Node):
             'table',
             self.tablenumber_callback,
             10)
-        self.tablenumber_subscription
+        self.tablenumber_subscription # prevent unused variable warning
         self.chosen_table=0
 
-    # def snapaction_callback(self,msg):
+    # def snapaction_callback(self,msg):  #Need to implement this
     #     if msg.data is not None:
-    #         self.placeholder_value=1
-    #     else:
-    #         self.placeholder_value=0
+    #         self.docked_yet=msg.data
+
 
     def tablenumber_callback(self, msg):
         self.chosen_table= msg.data
+        print('Table number received')
+        print("Table number received is:", self.chosen_table)
 
     ##################################################################
 
@@ -168,8 +172,8 @@ class AutoNav(Node):
         self.laser_range = np.array(msg.ranges)
         # print to file
         np.savetxt(scanfile, self.laser_range)
-        # replace 0's with nan
-        self.laser_range[self.laser_range==0] = np.nan
+        # replace 0's with 100
+        self.laser_range[self.laser_range==0] = placeholder_value #np.nan
 
 
 
@@ -179,56 +183,56 @@ class AutoNav(Node):
 
     # function to rotate the TurtleBot
     def rotatebot(self, rot_angle, turn_direction):
-        # self.get_logger().info('In rotatebot')
-        # create Twist object
-        twist = Twist()
-        
-        # get current yaw angle
-        current_yaw = self.yaw
-        # log the info
-        self.get_logger().info('Current: %f' % math.degrees(current_yaw))
-        # we are going to use complex numbers to avoid problems when the angles go from
-        # 360 to 0, or from -180 to 180
-        c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
-        # calculate desired yaw
-        target_yaw = current_yaw + math.radians(rot_angle)
-        # convert to complex notation
-        c_target_yaw = complex(math.cos(target_yaw),math.sin(target_yaw))
-        self.get_logger().info('Desired: %f' % math.degrees(cmath.phase(c_target_yaw)))
-        # divide the two complex numbers to get the change in direction
-        c_change = c_target_yaw / c_yaw
-        # get the sign of the imaginary component to figure out which way we have to turn
-        c_change_dir = np.sign(c_change.imag)
-        # set linear speed to zero so the TurtleBot rotates on the spot
-        twist.linear.x = 0.0
-        # set the direction to rotate
-        twist.angular.z = c_change_dir * rotatechange * turn_direction
-        # start rotation
-        self.publisher_.publish(twist)
-
-        # we will use the c_dir_diff variable to see if we can stop rotating
-        c_dir_diff = c_change_dir
-        # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
-        # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
-        # becomes -1.0, and vice versa
-        while(c_change_dir * c_dir_diff > 0):
-            # allow the callback functions to run
-            rclpy.spin_once(self)
+            # self.get_logger().info('In rotatebot')
+            # create Twist object
+            twist = Twist()
+            
+            # get current yaw angle
             current_yaw = self.yaw
-            # convert the current yaw to complex form
+            # log the info
+            self.get_logger().info('Current: %f' % math.degrees(current_yaw))
+            # we are going to use complex numbers to avoid problems when the angles go from
+            # 360 to 0, or from -180 to 180
             c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
-            # self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
-            # get difference in angle between current and target
+            # calculate desired yaw
+            target_yaw = current_yaw + math.radians(rot_angle)
+            # convert to complex notation
+            c_target_yaw = complex(math.cos(target_yaw),math.sin(target_yaw))
+            self.get_logger().info('Desired: %f' % math.degrees(cmath.phase(c_target_yaw)))
+            # divide the two complex numbers to get the change in direction
             c_change = c_target_yaw / c_yaw
-            # get the sign to see if we can stop
-            c_dir_diff = np.sign(c_change.imag)
-            # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
+            # get the sign of the imaginary component to figure out which way we have to turn
+            c_change_dir = np.sign(c_change.imag)
+            # set linear speed to zero so the TurtleBot rotates on the spot
+            twist.linear.x = 0.0
+            # set the direction to rotate
+            twist.angular.z = c_change_dir * rotatechange * turn_direction
+            # start rotation
+            self.publisher_.publish(twist)
 
-        self.get_logger().info('End Yaw: %f' % math.degrees(current_yaw))
-        # set the rotation speed to 0
-        twist.angular.z = 0.0
-        # stop the rotation
-        self.publisher_.publish(twist)
+            # we will use the c_dir_diff variable to see if we can stop rotating
+            c_dir_diff = c_change_dir
+            # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
+            # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
+            # becomes -1.0, and vice versa
+            while(c_change_dir * c_dir_diff > 0):
+                # allow the callback functions to run
+                rclpy.spin_once(self)
+                current_yaw = self.yaw
+                # convert the current yaw to complex form
+                c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
+                # self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
+                # get difference in angle between current and target
+                c_change = c_target_yaw / c_yaw
+                # get the sign to see if we can stop
+                c_dir_diff = np.sign(c_change.imag)
+                # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
+
+            self.get_logger().info('End Yaw: %f' % math.degrees(current_yaw))
+            # set the rotation speed to 0
+            twist.angular.z = 0.0
+            # stop the rotation
+            self.publisher_.publish(twist)
 
 
     def stopbot(self):
@@ -245,8 +249,6 @@ class AutoNav(Node):
         twist = Twist()
         twist.linear.x = move_speed
         twist.angular.z = 0.0
-        # not sure if this is really necessary, but things seem to work more
-        # reliably with this
         time.sleep(1)
         self.publisher_.publish(twist)
 
@@ -254,15 +256,17 @@ class AutoNav(Node):
     def move_front(self, stop_distance):
 
         if self.laser_range.size != 0:
-            # # check distances in front of TurtleBot and find values less than stop_distance
-            # lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
-            front_dist= self.laser_range[front_angle]
-            front_dist= ((stop_distance+0.10) if front_dist=='nan' else front_dist) #Deals with NaN values, cause I am lazy to search the proper filter
+            front_dist_range= self.laser_range[front_angles]
+            front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+            front_dist= sum(front_dist_range)/len(front_dist_range)
         
             while front_dist>stop_distance:
                 # allow the callback functions to run
                 rclpy.spin_once(self)
-                front_dist= self.laser_range[front_angle]
+
+                front_dist_range= self.laser_range[front_angles]
+                front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+                front_dist= sum(front_dist_range)/len(front_dist_range)
                 print('Front distance: '+str(front_dist))
                 self.speed(speedchange)
             
@@ -271,21 +275,57 @@ class AutoNav(Node):
     def move_back(self, stop_distance):
 
         if self.laser_range.size != 0:
-            # # check distances in front of TurtleBot and find values less than stop_distance
-            # lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
-            back_dist= self.laser_range[back_angle]
-            back_dist= ((stop_distance+0.10) if back_dist=='nan' else back_dist) #Deals with NaN values, cause I am lazy to search the proper filter
-
-        
+            
+            back_dist_range= self.laser_range[back_angles]
+            back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+            back_dist= sum(back_dist_range)/len(back_dist_range)
             while back_dist>stop_distance:
                 # allow the callback functions to run
                 rclpy.spin_once(self)
-                back_dist= self.laser_range[back_angle]
+                back_dist_range= self.laser_range[back_angles]
+                back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+                back_dist= sum(back_dist_range)/len(back_dist_range)
                 print('Back distance: '+str(back_dist))
                 self.speed(-speedchange)
             
             self.stopbot()  
 
+
+    ####These functions are just for testiing. Can remove later###
+    def check_back_dist(self):
+        if self.laser_range.size != 0:
+            back_dist_range= self.laser_range[back_angles]
+            back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+            back_dist= sum(back_dist_range)/len(back_dist_range)
+            while True:
+                rclpy.spin_once(self)
+                back_dist_range= self.laser_range[back_angles]
+                back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+                back_dist= sum(back_dist_range)/len(back_dist_range)
+                print('Back distance: '+str(back_dist))
+                print('Back distance: '+str(back_dist_range))
+
+    def check_front_dist(self):
+        if self.laser_range.size != 0:
+            front_dist_range= self.laser_range[front_angles]
+            front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+            front_dist= sum(front_dist_range)/len(front_dist_range)
+            while True:
+                rclpy.spin_once(self)
+                front_dist_range= self.laser_range[front_angles]
+                front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+                front_dist= sum(front_dist_range)/len(front_dist_range)
+                print('Front distance: '+str(front_dist))
+
+    def testing(self):
+        self.speed(speedchange)
+        print('Moving')
+        time.sleep(5)
+        self.stopbot()
+        print('Reached')
+        self.chosen_table=0
+    
+    ############################################################
 
 
     ############################################################
@@ -294,101 +334,87 @@ class AutoNav(Node):
 
     def table1(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_front(distance_to_stop)
             self.move_back(distance_to_stop)
+            self.move_front(distance_to_stop)
             self.docking()
 
     
     def table2(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_front(distance_to_stop)
-            self.rotatebot(90, right)
-            self.move_front(1.22)
-            self.move_back(0.5)
-            self.rotatebot(90, left)
             self.move_back(distance_to_stop)
+            self.rotatebot(90, right)
+            self.move_back(1.3)
+            self.move_front(0.6)
+            self.rotatebot(90, left)
+            self.move_front(distance_to_stop)
             self.docking()
 
     
     def table3(self):
-        if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_front(1.5)
-            self.rotatebot(90, right)
-            self.move_front(2.06)
-            self.move_back(0.5)
-            self.rotatebot(90, left)
-            self.move_back(distance_to_stop)
-            self.docking()
+        self.table2()
+
 
     def table4(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_front(1.5)
-            self.rotatebot(90, right)
-            self.move_front(1.26)
-            self.move_back(0.5)
-            self.rotatebot(90, left)
             self.move_back(distance_to_stop)
+            self.rotatebot(90, right)
+            self.move_back(0.5)
+            self.move_front(0.6)
+            self.rotatebot(90, left)
+            self.move_front(distance_to_stop)
             self.docking()
 
     
     def table5(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_front(1.6)
+            self.move_back(1.6)
             self.rotatebot(90, right)
-            self.move_front(0.42)
-            self.rotatebot(90, left)
-            self.move_front(distance_to_stop)
-            self.move_back(0.70)
-            self.rotatebot(90, right)
-            self.move_back(0.5)
+            self.move_back(0.42)
             self.rotatebot(90, left)
             self.move_back(distance_to_stop)
+            self.move_front(0.70)
+            self.rotatebot(90, right)
+            self.move_front(0.5)
+            self.rotatebot(90, left)
+            self.move_front(distance_to_stop)
             self.docking()
 
     def table6(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_front(0.5)
+            self.move_back(0.5)
             self.rotatebot(90,right)
-            self.move_front(0.4)
+            self.move_back(0.4)
             self.rotatebot(90,left)
-            self.move_front(0.84)
+            self.move_back(0.84)
             self.rotatebot(90,left)
             #### Code to find the table ###
-            if self.laser_range[front_angle]<2.0: #Stops in the event table is detected early, doesnt stop in middle of box
-                self.move_front(distance_to_stop)
-                self.move_back(0.5)
+            if min(self.laser_range[back_angles])<2.0: #Stops in the event table is detected early, doesnt stop in middle of box
+                self.move_back(distance_to_stop)
+                self.move_front(0.5)
             else:   # Else moves to middle of the square bounds
-                self.move_front(0.84)
-                self.move_back(0.5)
+                self.move_back(0.84)
+                self.move_front(0.5)
             #######################################
             self.rotatebot(90,right)
-            self.move_back(0.5)
+            self.move_front(0.5)
             self.rotatebot(90, right)
-            self.move_back(0.5)
+            self.move_front(0.5)
             self.rotatebot(90, left)
-            self.move_back(distance_to_stop)
+            self.move_front(distance_to_stop)
             self.docking()
 
     def docking(self):
+        self.speed(0.0)
         self.chosen_table=0
-        rclpy.shutdown() #Placeholder for now
-        #self.speed(-speedchange)
+        print('Docking')
+
 
 
     def select_table(self):
-        if self.chosen_table==0:
-            print("no input")
-        # else:
-        #     print(self.chosen_table)
-        #     rclpy.shutdown()
-
-        # if self.chosen_table==0:
-        #     self.stopbot()
-        else:
-            table_number_dict= {'1':self.table1, '2':self.table2, '3':self.table3, \
-                                '4':self.table4, '5':self.table5, '6':self.table6}
-            relevant_nav_function= table_number_dict.get(self.chosen_table)
-            relevant_nav_function()
+        table_number_dict= {'1':self.table1, '2':self.table2, '3':self.table3, \
+                            '4':self.table4, '5':self.table5, '6':self.table6}
+        relevant_nav_function= table_number_dict.get(self.chosen_table)
+        relevant_nav_function()
 
 
     ###################################################################
@@ -399,18 +425,17 @@ class AutoNav(Node):
             self.stopbot()
 
             while rclpy.ok():
-                self.select_table()
-                #self.table1()  
-                #self.docking()
-                # allow the callback functions to run
-                rclpy.spin_once(self)
-
+                rclpy.spin_once(self) # allow the callback functions to run
+                print('Waiting for next input')
+                if self.chosen_table!=0:
+                #     #self.testing()
+                    # self.check_back_dist()
+                    self.select_table()
+                    
         except Exception as e:
             print(e)
-        
-        # Ctrl-c detected
+
         finally:
-            # stop moving
             self.stopbot()
 
 
