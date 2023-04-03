@@ -14,6 +14,8 @@ import os
 import math
 import cmath
 import time
+import RPi.GPIO as GPIO 
+from hx711 import HX711 #for the load cell
 
 
 class FactoryTest(Node):
@@ -23,8 +25,6 @@ class FactoryTest(Node):
         
         # create publisher for moving TurtleBot
         self.publisher_ = self.create_publisher(Twist,'cmd_vel',10)
-        # self.get_logger().info('Created publisher')
-
         self.roll = 0
         self.pitch = 0
         self.yaw = 0
@@ -35,9 +35,10 @@ class FactoryTest(Node):
             'scan',
             self.scan_callback,
             qos_profile_sensor_data)
-
         self.laser_range = np.array([])
         self.laser_valid = True
+
+
 
 
     def scan_callback(self, msg):
@@ -62,6 +63,7 @@ class FactoryTest(Node):
     def clear(self):
         os.system('clear')
 
+    #Dynamixel test
     def dynamixeltest(self):
         twist = Twist()
         twist.linear.x = 0.0
@@ -99,6 +101,7 @@ class FactoryTest(Node):
                 time.sleep(0.5)
                 done = True
 
+    #Lidar test
     def lidartest(self):
         done = False
         while not done:
@@ -120,11 +123,36 @@ class FactoryTest(Node):
             print("laserscan data is INVALID, lidar is not functional")
             time.sleep(1)
 
+    #Load cell test
+    def weight_detected(self):
+        # while True:
+        hx711 = HX711(
+            dout_pin=6,
+            pd_sck_pin=5,
+            channel='A',
+            gain=64)
+
+        hx711.reset()   # Before we start, reset the HX711 (not obligate)
+        measures = hx711.get_raw_data()
+        weight= sum(measures)/len(measures)
+        return weight<50000 #Condition is true when weight placed
+    
+    def loadtest(self):
+        done= False
+        while not done:
+            print('Place weight on the TurtleBot carrier')
+            if self.weight_detected:
+                print('Weight detected on the TurtleBot carrier')
+                time.sleep(1)
+                done=True
+
+
 
     def test(self):
         try:
             self.dynamixeltest()
             self.lidartest()
+            self.loadtest()
                 
         except Exception as e:
             print(e)
