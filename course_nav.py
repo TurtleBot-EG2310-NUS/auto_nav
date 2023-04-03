@@ -1,4 +1,3 @@
-
 # Copyright 2016 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,12 +25,14 @@ import math
 import cmath
 import time
 import pandas as pd
+# import RPi.GPIO as GPIO 
+# from hx711 import HX711 #for the load cell
 
 # constants
 rotatechange = 0.1
 speedchange = -0.05
 occ_bins = [-1, 0, 100, 101]
-distance_to_stop = 0.5
+distance_to_stop = 0.6
 front_angles = range(-2,3,1)
 back_angles = range(178,183,1)
 placeholder_value= 5
@@ -40,7 +41,6 @@ right= -1
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
 
- 
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -174,7 +174,24 @@ class AutoNav(Node):
         np.savetxt(scanfile, self.laser_range)
         # replace 0's with 100
         self.laser_range[self.laser_range==0] = placeholder_value #np.nan
+    
 
+    ####################################################
+    ######## Function to read load cell sensor #########
+    ####################################################
+
+    # def weight_detected(self):
+    #     # while True:
+    #     hx711 = HX711(
+    #     dout_pin=6,
+    #     pd_sck_pin=5,
+    #     channel='A',
+    #     gain=64)
+
+    #     hx711.reset()   # Before we start, reset the HX711 (not obligate)
+    #     measures = hx711.get_raw_data()
+    #     weight= sum(measures)/len(measures)
+    #     print(str(weight))
 
 
     ####################################################
@@ -367,38 +384,47 @@ class AutoNav(Node):
     
     def table5(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_back(1.6)
+            self.move_back(1.75)
             self.rotatebot(90, right)
-            self.move_back(0.42)
+            self.move_back(0.5)
             self.rotatebot(90, left)
-            self.move_back(distance_to_stop)
             self.move_front(0.70)
             self.rotatebot(90, right)
-            self.move_front(0.5)
+            self.move_back(0.55)
+            self.rotatebot(90, left)
+            self.move_back(distance_to_stop)
+            #return back
+            self.move_front(0.6)
+            self.rotatebot(90, right)
+            self.move_front(2.2)
+            self.rotatebot(90, left)
+            self.move_back(distance_to_stop)
+            self.rotatebot(90, right)
+            self.move_front(distance_to_stop)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop)
             self.docking()
 
     def table6(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
-            self.move_back(0.5)
+            self.move_back(distance_to_stop)
             self.rotatebot(90,right)
-            self.move_back(0.4)
+            self.move_back(0.6)
             self.rotatebot(90,left)
-            self.move_back(0.84)
+            self.move_back(0.9)
             self.rotatebot(90,left)
             #### Code to find the table ###
             if min(self.laser_range[back_angles])<2.0: #Stops in the event table is detected early, doesnt stop in middle of box
                 self.move_back(distance_to_stop)
-                self.move_front(0.5)
+                self.move_front(distance_to_stop)
             else:   # Else moves to middle of the square bounds
-                self.move_back(0.84)
-                self.move_front(0.5)
+                self.move_back(0.9)
+                self.move_front(distance_to_stop)
             #######################################
             self.rotatebot(90,right)
-            self.move_front(0.5)
+            self.move_front(distance_to_stop)
             self.rotatebot(90, right)
-            self.move_front(0.5)
+            self.move_front(distance_to_stop)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop)
             self.docking()
@@ -428,9 +454,10 @@ class AutoNav(Node):
                 rclpy.spin_once(self) # allow the callback functions to run
                 print('Waiting for next input')
                 if self.chosen_table!=0:
-                #     #self.testing()
-                    # self.check_back_dist()
+                    #self.testing()
+                    #self.check_back_dist()
                     self.select_table()
+                    #self.weight_detected()
                     
         except Exception as e:
             print(e)
