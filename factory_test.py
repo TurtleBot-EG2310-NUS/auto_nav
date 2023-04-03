@@ -38,9 +38,6 @@ class FactoryTest(Node):
         self.laser_range = np.array([])
         self.laser_valid = True
 
-
-
-
     def scan_callback(self, msg):
         # create numpy array
         self.laser_range = np.array(msg.ranges)
@@ -71,7 +68,7 @@ class FactoryTest(Node):
         done = False
         while not done:
             self.clear()
-            print("place the bot on the floor with sufficient space for it to move\nthen input Y and observe if the turtlebot moves approximately 10cm front, 10cm back\nand then 90 degrees left and 90 degrees right")
+            print("Place the bot on the floor with sufficient space for it to move\nthen input Y and observe if the turtlebot moves approximately 10cm front, 10cm back\nand then 90 degrees left and 90 degrees right")
             if input() == 'y':
                 #forward
                 twist.linear.x = 0.2
@@ -138,14 +135,17 @@ class FactoryTest(Node):
         return weight<50000 #Condition is true when weight placed
     
     def loadtest(self):
-        done= False
+        done = False
         while not done:
-            print('Place weight on the TurtleBot carrier')
-            if self.weight_detected:
-                print('Weight detected on the TurtleBot carrier')
-                time.sleep(1)
+            self.clear()
+            print("Ensure that no payload is placed within the turtlebot carrier\nthen input Y to start the load cell test")
+            if input() == 'y':
                 done=True
+        while not self.weight_detected:
+            print('Waiting for payload')
 
+        print('Payload detected')
+        time.sleep(1)
 
 
     def test(self):
