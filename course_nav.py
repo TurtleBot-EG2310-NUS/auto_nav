@@ -25,8 +25,8 @@ import math
 import cmath
 import time
 import pandas as pd
-# import RPi.GPIO as GPIO 
-# from hx711 import HX711 #for the load cell
+import RPi.GPIO as GPIO 
+from hx711 import HX711 #for the load cell
 
 # constants
 rotatechange = 0.1
@@ -38,6 +38,7 @@ back_angles = range(178,183,1)
 placeholder_value= 5
 left= 1
 right= -1
+initial_weight_value= 50000
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
 
@@ -83,7 +84,7 @@ class AutoNav(Node):
             Odometry,
             'odom',
             self.odom_callback,
-            10)
+            qos_profile_sensor_data)
         # self.get_logger().info('Created subscriber')
         self.odom_subscription  # prevent unused variable warning
         # initialize variables
@@ -110,34 +111,34 @@ class AutoNav(Node):
         self.laser_range = np.array([])
         self.lri= 5
 
-
-    ######## Placeholder for the snap action switch topic ############
-        # self.actionswitch_subscription= self.create_subscription(
-        #     String,
-        #     'topic',
-        #     self.snapaction_callback,
-        #     10)
-        # self.actionswitch_subscription # prevent unused variable warning
-        # self.placeholder_value=0
-
+    
+    ######## Created subscribers (Table number & docking) ############
         self.tablenumber_subscription= self.create_subscription(
             String,
             'table',
             self.tablenumber_callback,
-            10)
+            qos_profile_sensor_data)
         self.tablenumber_subscription # prevent unused variable warning
         self.chosen_table=0
-
-    # def snapaction_callback(self,msg):  #Need to implement this
-    #     if msg.data is not None:
-    #         self.docked_yet=msg.data
-
 
     def tablenumber_callback(self, msg):
         self.chosen_table= msg.data
         print('Table number received')
         print("Table number received is:", self.chosen_table)
 
+
+
+        self.docking_subscription= self.create_subscription(
+            bool,
+            'dock',
+            self.docking_callback,
+            qos_profile_sensor_data)
+        self.docking_subscription # prevent unused variable warning
+        self.docked_yet= False
+
+    def docking_callback(self, msg):
+        self.docked_yet= msg.data
+        # print(self.docked_yet)
     ##################################################################
 
     def odom_callback(self, msg):
@@ -180,18 +181,18 @@ class AutoNav(Node):
     ######## Function to read load cell sensor #########
     ####################################################
 
-    # def weight_detected(self):
-    #     # while True:
-    #     hx711 = HX711(
-    #     dout_pin=6,
-    #     pd_sck_pin=5,
-    #     channel='A',
-    #     gain=64)
+    def weight_detected(self):
+        # while True:
+        hx711 = HX711(
+        dout_pin=6,
+        pd_sck_pin=5,
+        channel='A',
+        gain=64)
 
-    #     hx711.reset()   # Before we start, reset the HX711 (not obligate)
-    #     measures = hx711.get_raw_data()
-    #     weight= sum(measures)/len(measures)
-    #     print(str(weight))
+        hx711.reset()   # Before we start, reset the HX711 (not obligate)
+        measures = hx711.get_raw_data()
+        weight= sum(measures)/len(measures)
+        return weight<initial_weight_value #Condition is true when weight placed
 
 
     ####################################################
@@ -307,40 +308,46 @@ class AutoNav(Node):
             
             self.stopbot()  
 
+    def waiting_for_pickup(self):
+        while self.weight_detected:
+            print('Please pick the can up')
+        print('Can has been removed')
+        time.sleep(2) #This allows for delay between can being removed and robot moving off, for safety
+
 
     ####These functions are just for testiing. Can remove later###
-    def check_back_dist(self):
-        if self.laser_range.size != 0:
-            back_dist_range= self.laser_range[back_angles]
-            back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-            back_dist= sum(back_dist_range)/len(back_dist_range)
-            while True:
-                rclpy.spin_once(self)
-                back_dist_range= self.laser_range[back_angles]
-                back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-                back_dist= sum(back_dist_range)/len(back_dist_range)
-                print('Back distance: '+str(back_dist))
-                print('Back distance: '+str(back_dist_range))
+    # def check_back_dist(self):
+    #     if self.laser_range.size != 0:
+    #         back_dist_range= self.laser_range[back_angles]
+    #         back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+    #         back_dist= sum(back_dist_range)/len(back_dist_range)
+    #         while True:
+    #             rclpy.spin_once(self)
+    #             back_dist_range= self.laser_range[back_angles]
+    #             back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+    #             back_dist= sum(back_dist_range)/len(back_dist_range)
+    #             print('Back distance: '+str(back_dist))
+    #             print('Back distance: '+str(back_dist_range))
 
-    def check_front_dist(self):
-        if self.laser_range.size != 0:
-            front_dist_range= self.laser_range[front_angles]
-            front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-            front_dist= sum(front_dist_range)/len(front_dist_range)
-            while True:
-                rclpy.spin_once(self)
-                front_dist_range= self.laser_range[front_angles]
-                front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-                front_dist= sum(front_dist_range)/len(front_dist_range)
-                print('Front distance: '+str(front_dist))
+    # def check_front_dist(self):
+    #     if self.laser_range.size != 0:
+    #         front_dist_range= self.laser_range[front_angles]
+    #         front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+    #         front_dist= sum(front_dist_range)/len(front_dist_range)
+    #         while True:
+    #             rclpy.spin_once(self)
+    #             front_dist_range= self.laser_range[front_angles]
+    #             front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+    #             front_dist= sum(front_dist_range)/len(front_dist_range)
+    #             print('Front distance: '+str(front_dist))
 
-    def testing(self):
-        self.speed(speedchange)
-        print('Moving')
-        time.sleep(5)
-        self.stopbot()
-        print('Reached')
-        self.chosen_table=0
+    # def testing(self):
+    #     self.speed(speedchange)
+    #     print('Moving')
+    #     time.sleep(5)
+    #     self.stopbot()
+    #     print('Reached')
+    #     self.chosen_table=0
     
     ############################################################
 
@@ -352,6 +359,8 @@ class AutoNav(Node):
     def table1(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.move_back(distance_to_stop)
+            self.waiting_for_pickup()
+            #Return back to docking station
             self.move_front(distance_to_stop)
             self.docking()
 
@@ -361,6 +370,8 @@ class AutoNav(Node):
             self.move_back(distance_to_stop)
             self.rotatebot(90, right)
             self.move_back(1.3)
+            self.waiting_for_pickup()
+            #Return back to docking station
             self.move_front(0.6)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop)
@@ -376,6 +387,8 @@ class AutoNav(Node):
             self.move_back(distance_to_stop)
             self.rotatebot(90, right)
             self.move_back(0.5)
+            self.waiting_for_pickup()
+            #Return back to docking station
             self.move_front(0.6)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop)
@@ -393,7 +406,8 @@ class AutoNav(Node):
             self.move_back(0.55)
             self.rotatebot(90, left)
             self.move_back(distance_to_stop)
-            #return back
+            self.waiting_for_pickup()
+            #Return back to docking station
             self.move_front(0.6)
             self.rotatebot(90, right)
             self.move_front(2.2)
@@ -413,14 +427,21 @@ class AutoNav(Node):
             self.rotatebot(90,left)
             self.move_back(0.9)
             self.rotatebot(90,left)
+
             #### Code to find the table ###
             if min(self.laser_range[back_angles])<2.0: #Stops in the event table is detected early, doesnt stop in middle of box
                 self.move_back(distance_to_stop)
+                self.waiting_for_pickup()
+                #Return back to docking station
                 self.move_front(distance_to_stop)
+
             else:   # Else moves to middle of the square bounds
                 self.move_back(0.9)
+                self.waiting_for_pickup()
+                #Return back to docking station
                 self.move_front(distance_to_stop)
             #######################################
+
             self.rotatebot(90,right)
             self.move_front(distance_to_stop)
             self.rotatebot(90, right)
@@ -430,10 +451,13 @@ class AutoNav(Node):
             self.docking()
 
     def docking(self):
+        while self.docked_yet!=True:
+            print('Preparing to dock')
+            self.speed(speedchange)
+        #Stop robot once docked
         self.speed(0.0)
         self.chosen_table=0
-        print('Docking')
-
+        print('Robot has docked')
 
 
     def select_table(self):
@@ -454,10 +478,7 @@ class AutoNav(Node):
                 rclpy.spin_once(self) # allow the callback functions to run
                 print('Waiting for next input')
                 if self.chosen_table!=0:
-                    #self.testing()
-                    #self.check_back_dist()
                     self.select_table()
-                    #self.weight_detected()
                     
         except Exception as e:
             print(e)
