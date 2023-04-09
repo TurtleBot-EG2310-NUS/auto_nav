@@ -25,8 +25,6 @@ import math
 import cmath
 import time
 import pandas as pd
-import RPi.GPIO as GPIO 
-from hx711 import HX711 #for the load cell
 
 # constants
 rotatechange = 0.1
@@ -38,9 +36,10 @@ back_angles = range(178,183,1)
 placeholder_value= 5
 left= 1
 right= -1
-initial_weight_value= 50000
+initial_weight_value= 0
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
+qos_policy = rclpy.qos.QoSProfile(reliability = rclpy.qos.ReliabilityPolicy.BEST_EFFORT, history = rclpy.qos.HistoryPolicy.KEEP_LAST, depth = 10)
 
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
@@ -106,13 +105,13 @@ class AutoNav(Node):
             LaserScan,
             'scan',
             self.scan_callback,
-            qos_profile_sensor_data)
+            qos_profile= qos_policy)
         self.scan_subscription  # prevent unused variable warning
         self.laser_range = np.array([])
         self.lri= 5
 
     
-    ######## Created subscribers (Table number & docking) ############
+    ######## Created subscribers and callbacks(Table number & docking) ############
         self.tablenumber_subscription= self.create_subscription(
             String,
             'table',
@@ -121,23 +120,35 @@ class AutoNav(Node):
         self.tablenumber_subscription # prevent unused variable warning
         self.chosen_table=0
 
-    def tablenumber_callback(self, msg):
-        self.chosen_table= msg.data
-        print('Table number received')
-        print("Table number received is:", self.chosen_table)
-
-
-
         self.docking_subscription= self.create_subscription(
-            bool,
+            String,
             'dock',
             self.docking_callback,
             qos_profile_sensor_data)
         self.docking_subscription # prevent unused variable warning
         self.docked_yet= False
 
+        self.weight_subscription= self.create_subscription(
+            String,
+            'weight',
+            self.weight_callback,
+            qos_profile_sensor_data)
+        self.weight_subscription # prevent unused variable warning
+        self.weight_placed= False
+
+
+    def tablenumber_callback(self, msg):
+        self.chosen_table= msg.data
+        print('Table number received')
+        print("Table number received is:", self.chosen_table)
+
+    def weight_callback(self, msg):
+        #print("called")
+        self.weight_placed= msg.data=='true'
+        #print(self.weight_placed)
+
     def docking_callback(self, msg):
-        self.docked_yet= msg.data
+        self.docked_yet= (msg.data=='true')
         # print(self.docked_yet)
     ##################################################################
 
@@ -176,24 +187,6 @@ class AutoNav(Node):
         # replace 0's with 100
         self.laser_range[self.laser_range==0] = placeholder_value #np.nan
     
-
-    ####################################################
-    ######## Function to read load cell sensor #########
-    ####################################################
-
-    def weight_detected(self):
-        # while True:
-        hx711 = HX711(
-        dout_pin=6,
-        pd_sck_pin=5,
-        channel='A',
-        gain=64)
-
-        hx711.reset()   # Before we start, reset the HX711 (not obligate)
-        measures = hx711.get_raw_data()
-        weight= sum(measures)/len(measures)
-        return weight<initial_weight_value #Condition is true when weight placed
-
 
     ####################################################
     ########Basic functions (Move, stop, rotate)########
@@ -309,10 +302,18 @@ class AutoNav(Node):
             self.stopbot()  
 
     def waiting_for_pickup(self):
-        while self.weight_detected:
+        while self.weight_placed:
             print('Please pick the can up')
         print('Can has been removed')
         time.sleep(2) #This allows for delay between can being removed and robot moving off, for safety
+
+    def waiting_for_dropoff(self):
+        while not self.weight_placed:
+            print('Waiting for can')
+            #print(self.weight_placed)
+        print('Can has been dropped')
+
+
 
 
     ####These functions are just for testiing. Can remove later###
@@ -357,6 +358,7 @@ class AutoNav(Node):
     ############################################################
 
     def table1(self):
+        print('table 1')
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.move_back(distance_to_stop)
             self.waiting_for_pickup()
@@ -464,7 +466,10 @@ class AutoNav(Node):
         table_number_dict= {'1':self.table1, '2':self.table2, '3':self.table3, \
                             '4':self.table4, '5':self.table5, '6':self.table6}
         relevant_nav_function= table_number_dict.get(self.chosen_table)
+        self.waiting_for_dropoff()
         relevant_nav_function()
+
+
 
 
     ###################################################################
@@ -476,9 +481,10 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
-                print('Waiting for next input')
-                if self.chosen_table!=0:
-                    self.select_table()
+                #print('Waiting for next input')
+                # if self.chosen_table!=0:
+                #     self.select_table()
+                self.waiting_for_dropoff()
                     
         except Exception as e:
             print(e)
@@ -489,7 +495,6 @@ class AutoNav(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-
     auto_nav = AutoNav()
     auto_nav.mover()
     auto_nav.destroy_node()
