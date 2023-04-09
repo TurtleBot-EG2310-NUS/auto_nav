@@ -30,10 +30,11 @@ import pandas as pd
 rotatechange = 0.1
 speedchange = -0.05
 occ_bins = [-1, 0, 100, 101]
-distance_to_stop = 0.6
-front_angles = range(-2,3,1)
-back_angles = range(178,183,1)
-placeholder_value= 5
+distance_to_stop = 0.45
+distance_to_stop_dock= 0.5
+front_angles = range(-5,6,1)
+back_angles = range(175,186,1)
+placeholder_value= 5.0
 left= 1
 right= -1
 initial_weight_value= 0
@@ -83,7 +84,7 @@ class AutoNav(Node):
             Odometry,
             'odom',
             self.odom_callback,
-            qos_profile_sensor_data)
+            qos_policy)
         # self.get_logger().info('Created subscriber')
         self.odom_subscription  # prevent unused variable warning
         # initialize variables
@@ -136,6 +137,13 @@ class AutoNav(Node):
         self.weight_subscription # prevent unused variable warning
         self.weight_placed= False
 
+        # self.barcode_subscription= self.create_subscription(
+        #     String,
+        #     'barcode',
+        #     self.barcode_callback,
+        #     qos_profile_sensor_data)
+        # self.barcode_subscription # prevent unused variable warning
+
 
     def tablenumber_callback(self, msg):
         self.chosen_table= msg.data
@@ -143,13 +151,17 @@ class AutoNav(Node):
         print("Table number received is:", self.chosen_table)
 
     def weight_callback(self, msg):
-        #print("called")
+        # print("called")
         self.weight_placed= msg.data=='true'
-        #print(self.weight_placed)
+        # print(self.weight_placed)
+        # print(type(self.weight_placed))
 
     def docking_callback(self, msg):
         self.docked_yet= (msg.data=='true')
         # print(self.docked_yet)
+
+    # def barcode_callback(self, msg):
+    #     pass
     ##################################################################
 
     def odom_callback(self, msg):
@@ -182,8 +194,6 @@ class AutoNav(Node):
         # self.get_logger().info('In scan_callback')
         # create numpy array
         self.laser_range = np.array(msg.ranges)
-        # print to file
-        np.savetxt(scanfile, self.laser_range)
         # replace 0's with 100
         self.laser_range[self.laser_range==0] = placeholder_value #np.nan
     
@@ -270,16 +280,24 @@ class AutoNav(Node):
             front_dist_range= self.laser_range[front_angles]
             front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
             front_dist= sum(front_dist_range)/len(front_dist_range)
+            print('Front distance: ', front_dist)
         
             while front_dist>stop_distance:
-                # allow the callback functions to run
-                rclpy.spin_once(self)
-
-                front_dist_range= self.laser_range[front_angles]
-                front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-                front_dist= sum(front_dist_range)/len(front_dist_range)
-                print('Front distance: '+str(front_dist))
-                self.speed(speedchange)
+                
+                if front_dist==placeholder_value:
+                    rclpy.spin_once(self) # allow the callback functions to run
+                    front_dist_range= self.laser_range[front_angles]
+                    front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+                    front_dist= sum(front_dist_range)/len(front_dist_range)
+                    print('Waiting for better Lidar values')
+                    self.speed(0.0)
+                else:
+                    rclpy.spin_once(self) # allow the callback functions to run
+                    front_dist_range= self.laser_range[front_angles]
+                    front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+                    front_dist= sum(front_dist_range)/len(front_dist_range)
+                    print('Front distance: '+str(front_dist))
+                    self.speed(speedchange)
             
             self.stopbot()  
 
@@ -290,67 +308,43 @@ class AutoNav(Node):
             back_dist_range= self.laser_range[back_angles]
             back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
             back_dist= sum(back_dist_range)/len(back_dist_range)
+
             while back_dist>stop_distance:
-                # allow the callback functions to run
-                rclpy.spin_once(self)
-                back_dist_range= self.laser_range[back_angles]
-                back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-                back_dist= sum(back_dist_range)/len(back_dist_range)
-                print('Back distance: '+str(back_dist))
-                self.speed(-speedchange)
+
+                if back_dist==placeholder_value:
+                    rclpy.spin_once(self) # allow the callback functions to run
+                    back_dist_range= self.laser_range[back_angles]
+                    back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+                    back_dist= sum(back_dist_range)/len(back_dist_range)
+                    print('Waiting for better Lidar values')
+                    self.speed(0.0)
             
+                else:
+                    rclpy.spin_once(self) # allow the callback functions to run
+                    back_dist_range= self.laser_range[back_angles]
+                    back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+                    back_dist= sum(back_dist_range)/len(back_dist_range)
+                    print('Back distance: '+str(back_dist))
+                    self.speed(-speedchange)
+
             self.stopbot()  
 
     def waiting_for_pickup(self):
+        # time.sleep(2)
         while self.weight_placed:
+            rclpy.spin_once(self)
             print('Please pick the can up')
+            # time.sleep(0.5)
         print('Can has been removed')
-        time.sleep(2) #This allows for delay between can being removed and robot moving off, for safety
+        time.sleep(1) #This allows for delay between can being removed and robot moving off, for safety
 
     def waiting_for_dropoff(self):
+        # time.sleep(2)
         while not self.weight_placed:
-            print('Waiting for can')
-            #print(self.weight_placed)
+            rclpy.spin_once(self)
+            print("Waiting for can to drop")
+            # time.sleep(0.5)
         print('Can has been dropped')
-
-
-
-
-    ####These functions are just for testiing. Can remove later###
-    # def check_back_dist(self):
-    #     if self.laser_range.size != 0:
-    #         back_dist_range= self.laser_range[back_angles]
-    #         back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-    #         back_dist= sum(back_dist_range)/len(back_dist_range)
-    #         while True:
-    #             rclpy.spin_once(self)
-    #             back_dist_range= self.laser_range[back_angles]
-    #             back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-    #             back_dist= sum(back_dist_range)/len(back_dist_range)
-    #             print('Back distance: '+str(back_dist))
-    #             print('Back distance: '+str(back_dist_range))
-
-    # def check_front_dist(self):
-    #     if self.laser_range.size != 0:
-    #         front_dist_range= self.laser_range[front_angles]
-    #         front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-    #         front_dist= sum(front_dist_range)/len(front_dist_range)
-    #         while True:
-    #             rclpy.spin_once(self)
-    #             front_dist_range= self.laser_range[front_angles]
-    #             front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-    #             front_dist= sum(front_dist_range)/len(front_dist_range)
-    #             print('Front distance: '+str(front_dist))
-
-    # def testing(self):
-    #     self.speed(speedchange)
-    #     print('Moving')
-    #     time.sleep(5)
-    #     self.stopbot()
-    #     print('Reached')
-    #     self.chosen_table=0
-    
-    ############################################################
 
 
     ############################################################
@@ -358,17 +352,18 @@ class AutoNav(Node):
     ############################################################
 
     def table1(self):
-        print('table 1')
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.waiting_for_dropoff()
             self.move_back(distance_to_stop)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(distance_to_stop)
+            self.move_front(distance_to_stop_dock)
             self.docking()
 
     
     def table2(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.waiting_for_dropoff()
             self.move_back(distance_to_stop)
             self.rotatebot(90, right)
             self.move_back(1.3)
@@ -376,7 +371,7 @@ class AutoNav(Node):
             #Return back to docking station
             self.move_front(0.6)
             self.rotatebot(90, left)
-            self.move_front(distance_to_stop)
+            self.move_front(distance_to_stop_dock)
             self.docking()
 
     
@@ -386,6 +381,7 @@ class AutoNav(Node):
 
     def table4(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.waiting_for_dropoff()
             self.move_back(distance_to_stop)
             self.rotatebot(90, right)
             self.move_back(0.5)
@@ -393,12 +389,13 @@ class AutoNav(Node):
             #Return back to docking station
             self.move_front(0.6)
             self.rotatebot(90, left)
-            self.move_front(distance_to_stop)
+            self.move_front(distance_to_stop_dock)
             self.docking()
 
     
     def table5(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.waiting_for_dropoff()
             self.move_back(1.75)
             self.rotatebot(90, right)
             self.move_back(0.5)
@@ -418,11 +415,12 @@ class AutoNav(Node):
             self.rotatebot(90, right)
             self.move_front(distance_to_stop)
             self.rotatebot(90, left)
-            self.move_front(distance_to_stop)
+            self.move_front(distance_to_stop_dock)
             self.docking()
 
     def table6(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.waiting_for_dropoff()
             self.move_back(distance_to_stop)
             self.rotatebot(90,right)
             self.move_back(0.6)
@@ -449,13 +447,14 @@ class AutoNav(Node):
             self.rotatebot(90, right)
             self.move_front(distance_to_stop)
             self.rotatebot(90, left)
-            self.move_front(distance_to_stop)
+            self.move_front(distance_to_stop_dock)
             self.docking()
 
     def docking(self):
         while self.docked_yet!=True:
+            rclpy.spin_once(self)
             print('Preparing to dock')
-            self.speed(speedchange)
+            self.speed(-0.01)
         #Stop robot once docked
         self.speed(0.0)
         self.chosen_table=0
@@ -481,10 +480,11 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
-                #print('Waiting for next input')
-                # if self.chosen_table!=0:
-                #     self.select_table()
-                self.waiting_for_dropoff()
+                #self.waiting_for_pickup()
+                print('Waiting for next input')
+                if self.chosen_table!=0:
+                    self.select_table()
+
                     
         except Exception as e:
             print(e)
