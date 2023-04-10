@@ -28,10 +28,10 @@ import pandas as pd
 
 # constants
 rotatechange = 0.1
-speedchange = -0.05
+speedchange = -0.07
 occ_bins = [-1, 0, 100, 101]
 distance_to_stop = 0.45
-distance_to_stop_dock= 0.5
+distance_to_stop_dock= 0.8
 front_angles = range(-5,6,1)
 back_angles = range(175,186,1)
 placeholder_value= 5.0
@@ -137,6 +137,15 @@ class AutoNav(Node):
         self.weight_subscription # prevent unused variable warning
         self.weight_placed= False
 
+        self.line_subscription= self.create_subscription(
+            String,
+            'line',
+            self.line_callback,
+            qos_profile_sensor_data)
+        self.line_subscription # prevent unused variable warning
+        self.line_direction= 'a'
+
+
         # self.barcode_subscription= self.create_subscription(
         #     String,
         #     'barcode',
@@ -159,6 +168,9 @@ class AutoNav(Node):
     def docking_callback(self, msg):
         self.docked_yet= (msg.data=='true')
         # print(self.docked_yet)
+    
+    def line_callback(self, msg):
+        self.line_direction= msg.data
 
     # def barcode_callback(self, msg):
     #     pass
@@ -451,10 +463,27 @@ class AutoNav(Node):
             self.docking()
 
     def docking(self):
+        twist= Twist()
         while self.docked_yet!=True:
             rclpy.spin_once(self)
             print('Preparing to dock')
-            self.speed(-0.01)
+            self.speed(-0.02)
+
+            if self.line_direction=='b':
+                self.speed(0.0)
+                # self.speed(-0.01)
+            elif self.line_direction=='l':
+                twist.linear.x = speedchange
+                twist.angular.z = -0.7
+                self.publisher_.publish(twist)
+            elif self.line_direction=='r':
+                twist.linear.x = speedchange
+                twist.angular.z = 0.7
+                self.publisher_.publish(twist)
+            else:
+                pass
+
+                
         #Stop robot once docked
         self.speed(0.0)
         self.chosen_table=0
@@ -481,9 +510,10 @@ class AutoNav(Node):
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
                 #self.waiting_for_pickup()
-                print('Waiting for next input')
-                if self.chosen_table!=0:
-                    self.select_table()
+                # print('Waiting for next input')
+                # if self.chosen_table!=0:
+                #     self.select_table()
+                self.table1()
 
                     
         except Exception as e:
