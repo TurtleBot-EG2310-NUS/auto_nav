@@ -30,8 +30,8 @@ import pandas as pd
 rotatechange = 0.1
 speedchange = -0.07
 occ_bins = [-1, 0, 100, 101]
-distance_to_stop = 0.45
-distance_to_stop_dock= 0.8
+distance_to_stop = 0.55
+distance_to_stop_dock= 1.0
 front_angles = range(-5,6,1)
 back_angles = range(175,186,1)
 placeholder_value= 5.0
@@ -286,57 +286,55 @@ class AutoNav(Node):
         self.publisher_.publish(twist)
 
 
+    def front_intermediate(self): #get the average front distance
+            front_dist_range= self.laser_range[front_angles]
+            #front_dist_range.remove(min(front_dist_range))
+            front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
+            self.front_dist= sum(front_dist_range)/len(front_dist_range)
+
     def move_front(self, stop_distance):
 
         if self.laser_range.size != 0:
-            front_dist_range= self.laser_range[front_angles]
-            front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-            front_dist= sum(front_dist_range)/len(front_dist_range)
-            print('Front distance: ', front_dist)
+            self.front_intermediate()
+            print('Front distance: ', self.front_dist)
         
-            while front_dist>stop_distance:
-                
-                if front_dist==placeholder_value:
+            while self.front_dist>stop_distance:
+                if self.front_dist==placeholder_value:
                     rclpy.spin_once(self) # allow the callback functions to run
-                    front_dist_range= self.laser_range[front_angles]
-                    front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-                    front_dist= sum(front_dist_range)/len(front_dist_range)
+                    self.front_intermediate()
                     print('Waiting for better Lidar values')
-                    self.speed(0.0)
+                    self.speed(0.01)
                 else:
                     rclpy.spin_once(self) # allow the callback functions to run
-                    front_dist_range= self.laser_range[front_angles]
-                    front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-                    front_dist= sum(front_dist_range)/len(front_dist_range)
-                    print('Front distance: '+str(front_dist))
+                    self.front_intermediate()
+                    print('Front distance: '+str(self.front_dist))
                     self.speed(speedchange)
             
             self.stopbot()  
 
+
+    def back_intermediate(self):  #get the average back distance
+        back_dist_range= self.laser_range[back_angles]
+        #back_dist_range.remove(min(back_dist_range))
+        back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
+        self.back_dist= sum(back_dist_range)/len(back_dist_range)
+
     def move_back(self, stop_distance):
 
         if self.laser_range.size != 0:
-            
-            back_dist_range= self.laser_range[back_angles]
-            back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-            back_dist= sum(back_dist_range)/len(back_dist_range)
+            self.back_intermediate()
 
-            while back_dist>stop_distance:
-
-                if back_dist==placeholder_value:
+            while self.back_dist>stop_distance:
+                if self.back_dist==placeholder_value:
                     rclpy.spin_once(self) # allow the callback functions to run
-                    back_dist_range= self.laser_range[back_angles]
-                    back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-                    back_dist= sum(back_dist_range)/len(back_dist_range)
+                    self.back_intermediate()
                     print('Waiting for better Lidar values')
-                    self.speed(0.0)
+                    self.speed(0.01)
             
                 else:
                     rclpy.spin_once(self) # allow the callback functions to run
-                    back_dist_range= self.laser_range[back_angles]
-                    back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-                    back_dist= sum(back_dist_range)/len(back_dist_range)
-                    print('Back distance: '+str(back_dist))
+                    self.back_intermediate()
+                    print('Back distance: '+str(self.back_dist))
                     self.speed(-speedchange)
 
             self.stopbot()  
@@ -348,7 +346,7 @@ class AutoNav(Node):
             print('Please pick the can up')
             # time.sleep(0.5)
         print('Can has been removed')
-        time.sleep(1) #This allows for delay between can being removed and robot moving off, for safety
+        time.sleep(3) #This allows for delay between can being removed and robot moving off, for safety
 
     def waiting_for_dropoff(self):
         # time.sleep(2)
@@ -370,6 +368,9 @@ class AutoNav(Node):
             self.waiting_for_pickup()
             #Return back to docking station
             self.move_front(distance_to_stop_dock)
+            self.rotatebot(90, right)
+            self.move_front(0.45)
+            self.rotatebot(120, left)
             self.docking()
 
     
@@ -381,9 +382,10 @@ class AutoNav(Node):
             self.move_back(1.3)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.6)
+            self.move_front(0.4)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
+            self.rotatebot(30, left)
             self.docking()
 
     
@@ -466,22 +468,21 @@ class AutoNav(Node):
         twist= Twist()
         while self.docked_yet!=True:
             rclpy.spin_once(self)
-            print('Preparing to dock')
-            self.speed(-0.02)
+            print('Docking now')
 
             if self.line_direction=='b':
-                self.speed(0.0)
+                self.speed(-0.03)
                 # self.speed(-0.01)
             elif self.line_direction=='l':
-                twist.linear.x = speedchange
-                twist.angular.z = -0.7
+                twist.linear.x = -0.0
+                twist.angular.z = -0.02
                 self.publisher_.publish(twist)
             elif self.line_direction=='r':
-                twist.linear.x = speedchange
-                twist.angular.z = 0.7
+                twist.linear.x = -0.0
+                twist.angular.z = 0.02
                 self.publisher_.publish(twist)
             else:
-                pass
+                self.speed(-0.03)
 
                 
         #Stop robot once docked
@@ -509,11 +510,11 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
-                #self.waiting_for_pickup()
-                # print('Waiting for next input')
-                # if self.chosen_table!=0:
-                #     self.select_table()
-                self.table1()
+                print('Waiting for next input')
+                if self.chosen_table!=0:
+                    print('Table gotten')
+                    self.select_table()
+
 
                     
         except Exception as e:
