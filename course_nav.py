@@ -25,13 +25,16 @@ import math
 import cmath
 import time
 import pandas as pd
+from math import sqrt
+from std_srvs.srv import Empty
+from geometry_msgs.msg import Point, Quaternion, Twist
 
 # constants
-rotatechange = 0.1
+rotatechange = 0.3
 speedchange = -0.07
 occ_bins = [-1, 0, 100, 101]
 distance_to_stop = 0.55
-distance_to_stop_dock= 1.0
+distance_to_stop_dock= 1.2
 front_angles = range(-5,6,1)
 back_angles = range(175,186,1)
 placeholder_value= 5.0
@@ -41,7 +44,7 @@ initial_weight_value= 0
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
 qos_policy = rclpy.qos.QoSProfile(reliability = rclpy.qos.ReliabilityPolicy.BEST_EFFORT, history = rclpy.qos.HistoryPolicy.KEEP_LAST, depth = 10)
-
+odom_distance = 0.0
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -368,41 +371,47 @@ class AutoNav(Node):
             self.waiting_for_pickup()
             #Return back to docking station
             self.move_front(distance_to_stop_dock)
- 
-            # self.rotatebot(90, right)
-            # self.move_front(0.45)
-            # self.rotatebot(135, left)
             self.docking()
 
     
     def table2(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
-            self.move_back(distance_to_stop)
+            self.move_back(0.5) #distance from bucket 1
             self.rotatebot(90, right)
-            self.move_back(1.3)
+            self.move_back(1.4) #distance from left wall
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.5)
+            self.move_front(0.90) 
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
-            self.rotatebot(30, left)
             self.docking()
 
     
     def table3(self):
-        self.table2()
+        if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+            self.waiting_for_dropoff()
+            self.move_back(0.6)
+            self.rotatebot(90, right)
+            self.move_back(1.4)
+            self.waiting_for_pickup()
+            #Return back to docking station
+            self.move_front(0.90)
+            self.rotatebot(90, left)
+            self.move_front(distance_to_stop_dock)
+            self.docking()
+
 
 
     def table4(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
-            self.move_back(distance_to_stop)
+            self.move_back(0.6)
             self.rotatebot(90, right)
             self.move_back(0.5)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.6)
+            self.move_front(0.9)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
             self.docking()
@@ -467,30 +476,44 @@ class AutoNav(Node):
 
     def docking(self):
         twist= Twist()
+        flag = False
         rclpy.spin_once(self)
         while self.docked_yet!=True:
             rclpy.spin_once(self)
-            print('Docking now')
 
             if self.line_direction=='b':
+                print('Dock: Moving forward')
                 self.speed(-0.03)
                 #self.speed(0.0)
             elif self.line_direction=='l':
+                print('Dock: Turning right')
                 twist.linear.x = -0.01
-                twist.angular.z = -0.01
+                twist.angular.z = -0.03
                 self.publisher_.publish(twist)
             elif self.line_direction=='r':
+                print('Dock: Turning left')
                 twist.linear.x = -0.01
-                twist.angular.z = 0.01
+                twist.angular.z = 0.03
                 self.publisher_.publish(twist)
+
             else:
-                self.speed(0.0)
-                self.rotatebot(90, right)
-                self.move_front(0.45)
-                self.rotatebot(135, left)
-                while self.line_direction=='w':
-                    rclpy.spin_once(self)
-                    self.speed(move_speed)
+                if flag == False:
+                    self.speed(0.0)
+                    self.rotatebot(90, right)
+                    self.move_front(0.5)
+                    self.rotatebot(135, left)
+                    while self.line_direction=='n':
+                        print('Moving to docking position')
+                        rclpy.spin_once(self)
+                        self.speed(-0.03)
+                        print(self.line_direction)
+                    flag = True
+                    print('Exited')
+                else: 
+                    print("Adjusting course")
+                    twist.linear.x = -0.0
+                    twist.angular.z = -0.02
+                    self.publisher_.publish(twist)
 
                 
         #Stop robot once docked
@@ -534,11 +557,12 @@ class AutoNav(Node):
             self.stopbot()
 
 
+
 def main(args=None):
     rclpy.init(args=args)
     auto_nav = AutoNav()
-    #auto_nav.mover()
-    auto_nav.docking()
+    auto_nav.mover()
+
     auto_nav.destroy_node()
     rclpy.shutdown()
 
