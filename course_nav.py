@@ -362,15 +362,16 @@ class AutoNav(Node):
     ############################################################
 
     def table1(self):
-        if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
+        if self.laser_range.size != 0:  #This line to ensure movef_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
             self.move_back(distance_to_stop)
             self.waiting_for_pickup()
             #Return back to docking station
             self.move_front(distance_to_stop_dock)
-            self.rotatebot(90, right)
-            self.move_front(0.45)
-            self.rotatebot(120, left)
+ 
+            # self.rotatebot(90, right)
+            # self.move_front(0.45)
+            # self.rotatebot(135, left)
             self.docking()
 
     
@@ -382,7 +383,7 @@ class AutoNav(Node):
             self.move_back(1.3)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.4)
+            self.move_front(0.5)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
             self.rotatebot(30, left)
@@ -466,23 +467,30 @@ class AutoNav(Node):
 
     def docking(self):
         twist= Twist()
+        rclpy.spin_once(self)
         while self.docked_yet!=True:
             rclpy.spin_once(self)
             print('Docking now')
 
             if self.line_direction=='b':
                 self.speed(-0.03)
-                # self.speed(-0.01)
+                #self.speed(0.0)
             elif self.line_direction=='l':
-                twist.linear.x = -0.0
-                twist.angular.z = -0.02
+                twist.linear.x = -0.01
+                twist.angular.z = -0.01
                 self.publisher_.publish(twist)
             elif self.line_direction=='r':
-                twist.linear.x = -0.0
-                twist.angular.z = 0.02
+                twist.linear.x = -0.01
+                twist.angular.z = 0.01
                 self.publisher_.publish(twist)
             else:
-                self.speed(-0.03)
+                self.speed(0.0)
+                self.rotatebot(90, right)
+                self.move_front(0.45)
+                self.rotatebot(135, left)
+                while self.line_direction=='w':
+                    rclpy.spin_once(self)
+                    self.speed(move_speed)
 
                 
         #Stop robot once docked
@@ -510,9 +518,11 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
-                print('Waiting for next input')
+                # print('Waiting for next input')
+                self.get_logger().info('Waiting for next input')
                 if self.chosen_table!=0:
-                    print('Table gotten')
+                    # print('Table gotten')
+                    self.get_logger().info('Table gotten')
                     self.select_table()
 
 
@@ -527,9 +537,11 @@ class AutoNav(Node):
 def main(args=None):
     rclpy.init(args=args)
     auto_nav = AutoNav()
-    auto_nav.mover()
+    #auto_nav.mover()
+    auto_nav.docking()
     auto_nav.destroy_node()
     rclpy.shutdown()
+
 
 
 if __name__ == '__main__':
