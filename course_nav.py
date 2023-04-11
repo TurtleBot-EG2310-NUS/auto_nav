@@ -15,7 +15,7 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Point
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
@@ -70,7 +70,6 @@ def euler_from_quaternion(x, y, z, w):
     return roll_x, pitch_y, yaw_z # in radians
 
 class AutoNav(Node):
-
 
     ##############################################################################
     ########Basic initialisastion (Initialisation and callback functions) ########
@@ -148,15 +147,6 @@ class AutoNav(Node):
         self.line_subscription # prevent unused variable warning
         self.line_direction= 'a'
 
-
-        # self.barcode_subscription= self.create_subscription(
-        #     String,
-        #     'barcode',
-        #     self.barcode_callback,
-        #     qos_profile_sensor_data)
-        # self.barcode_subscription # prevent unused variable warning
-
-
     def tablenumber_callback(self, msg):
         self.chosen_table= msg.data
         print('Table number received')
@@ -175,15 +165,11 @@ class AutoNav(Node):
     def line_callback(self, msg):
         self.line_direction= msg.data
 
-    # def barcode_callback(self, msg):
-    #     pass
-    ##################################################################
-
     def odom_callback(self, msg):
         # self.get_logger().info('In odom_callback')
         orientation_quat =  msg.pose.pose.orientation
         self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
-
+        self.current_position= msg.pose.pose.position
 
     def occ_callback(self, msg):
         # self.get_logger().info('In occ_callback')
@@ -295,24 +281,20 @@ class AutoNav(Node):
             front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
             self.front_dist= sum(front_dist_range)/len(front_dist_range)
 
-    def move_front(self, stop_distance):
+    def move_front(self, stop_distance, travel_distance):
 
         if self.laser_range.size != 0:
             self.front_intermediate()
-            print('Front distance: ', self.front_dist)
-        
-            while self.front_dist>stop_distance:
-                if self.front_dist==placeholder_value:
+            self.old_position = self.current_position
+            linear_distance= 0.0
+            while self.front_dist>stop_distance and linear_distance < travel_distance:
                     rclpy.spin_once(self) # allow the callback functions to run
                     self.front_intermediate()
-                    print('Waiting for better Lidar values')
-                    self.speed(0.01)
-                else:
-                    rclpy.spin_once(self) # allow the callback functions to run
-                    self.front_intermediate()
-                    print('Front distance: '+str(self.front_dist))
-                    self.speed(speedchange)
-            
+                    linear_distance = sqrt((self.current_position.x - self.old_position.x) ** 2 + (self.current_position.y - self.old_position.y) ** 2)
+                    self.speed(speedchange) 
+                    print('Moving forwards')
+                    print('Distance travelled: ', linear_distance)
+                    print('Front distance: ', self.front_dist) 
             self.stopbot()  
 
 
@@ -322,25 +304,22 @@ class AutoNav(Node):
         back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
         self.back_dist= sum(back_dist_range)/len(back_dist_range)
 
-    def move_back(self, stop_distance):
-
+    def move_back(self, stop_distance, travel_distance):
         if self.laser_range.size != 0:
             self.back_intermediate()
-
-            while self.back_dist>stop_distance:
-                if self.back_dist==placeholder_value:
+            self.old_position = self.current_position #gets current position
+            linear_distance= 0.0
+        
+            while self.back_dist>stop_distance and linear_distance < travel_distance:
                     rclpy.spin_once(self) # allow the callback functions to run
                     self.back_intermediate()
-                    print('Waiting for better Lidar values')
-                    self.speed(0.01)
-            
-                else:
-                    rclpy.spin_once(self) # allow the callback functions to run
-                    self.back_intermediate()
-                    print('Back distance: '+str(self.back_dist))
-                    self.speed(-speedchange)
+                    linear_distance = sqrt((self.current_position.x - self.old_position.x) ** 2 + (self.current_position.y - self.old_position.y) ** 2)
+                    self.speed(-speedchange) 
+                    print('Moving backwards')
+                    print('Back distance: ', self.back_dist)
+                    print('Distance travelled: ', linear_distance)
+            self.stopbot()    
 
-            self.stopbot()  
 
     def waiting_for_pickup(self):
         # time.sleep(2)
@@ -474,6 +453,7 @@ class AutoNav(Node):
             self.move_front(distance_to_stop_dock)
             self.docking()
 
+
     def docking(self):
         twist= Twist()
         flag = False
@@ -495,7 +475,6 @@ class AutoNav(Node):
                 twist.linear.x = -0.01
                 twist.angular.z = 0.03
                 self.publisher_.publish(twist)
-
             else:
                 if flag == False:
                     self.speed(0.0)
@@ -529,6 +508,10 @@ class AutoNav(Node):
         self.waiting_for_dropoff()
         relevant_nav_function()
 
+    def testing(self):
+        self.move_back(0.2, 0.5)
+        print('next')
+        self.move_back(0.2, 0.7)
 
 
 
@@ -541,11 +524,9 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
-                # print('Waiting for next input')
-                self.get_logger().info('Waiting for next input')
+                print('Waiting for next input')
                 if self.chosen_table!=0:
-                    # print('Table gotten')
-                    self.get_logger().info('Table gotten')
+                    print('Table gotten')
                     self.select_table()
 
 
