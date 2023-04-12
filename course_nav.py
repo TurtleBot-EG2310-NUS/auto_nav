@@ -31,16 +31,16 @@ from geometry_msgs.msg import Point, Quaternion, Twist
 
 # constants
 rotatechange = 0.3
-speedchange = -0.07
+speedchange = -0.1
 occ_bins = [-1, 0, 100, 101]
-distance_to_stop = 0.55
-distance_to_stop_dock= 1.2
+distance_to_stop = 0.20
+distance_to_stop_dock= 0.6
 front_angles = range(-5,6,1)
 back_angles = range(175,186,1)
-placeholder_value= 5.0
 left= 1
 right= -1
 initial_weight_value= 0
+
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
 qos_policy = rclpy.qos.QoSProfile(reliability = rclpy.qos.ReliabilityPolicy.BEST_EFFORT, history = rclpy.qos.HistoryPolicy.KEEP_LAST, depth = 10)
@@ -108,7 +108,7 @@ class AutoNav(Node):
             LaserScan,
             'scan',
             self.scan_callback,
-            qos_profile= qos_policy)
+            qos_profile= qos_profile_sensor_data)
         self.scan_subscription  # prevent unused variable warning
         self.laser_range = np.array([])
         self.lri= 5
@@ -147,10 +147,12 @@ class AutoNav(Node):
         self.line_subscription # prevent unused variable warning
         self.line_direction= 'a'
 
+        self.table_6_segment= 0
+
     def tablenumber_callback(self, msg):
         self.chosen_table= msg.data
-        print('Table number received')
-        print("Table number received is:", self.chosen_table)
+        # self.get_logger().info('Table number received')
+        self.get_logger().info("Table number received is: %s" % self.chosen_table)
 
     def weight_callback(self, msg):
         # print("called")
@@ -196,7 +198,7 @@ class AutoNav(Node):
         # create numpy array
         self.laser_range = np.array(msg.ranges)
         # replace 0's with 100
-        self.laser_range[self.laser_range==0] = placeholder_value #np.nan
+        self.laser_range[self.laser_range==0] = np.nan
     
 
     ####################################################
@@ -275,68 +277,54 @@ class AutoNav(Node):
         self.publisher_.publish(twist)
 
 
-    def front_intermediate(self): #get the average front distance
-            front_dist_range= self.laser_range[front_angles]
-            #front_dist_range.remove(min(front_dist_range))
-            front_dist_range[front_dist_range==placeholder_value] = min(front_dist_range)
-            self.front_dist= sum(front_dist_range)/len(front_dist_range)
+    def move_front(self, dist_limit):
+        self.speed(speedchange)
+        while True:
+            rclpy.spin_once(self)
+            # self.get_logger().info('Working')
+            while self.laser_range.size==0 or math.isnan(self.laser_range[0]):   
+                rclpy.spin_once(self)
+                front_distance= self.laser_range[0]   
+            front_distance= self.laser_range[0] - 0.10#Lidar offset due to front carrier
+            self.get_logger().info('Distance is %f ' %front_distance)
 
-    def move_front(self, stop_distance, travel_distance):
+            if front_distance<dist_limit:
+                self.stopbot()
+                break
 
-        if self.laser_range.size != 0:
-            self.front_intermediate()
-            self.old_position = self.current_position
-            linear_distance= 0.0
-            while self.front_dist>stop_distance and linear_distance < travel_distance:
-                    rclpy.spin_once(self) # allow the callback functions to run
-                    self.front_intermediate()
-                    linear_distance = sqrt((self.current_position.x - self.old_position.x) ** 2 + (self.current_position.y - self.old_position.y) ** 2)
-                    self.speed(speedchange) 
-                    print('Moving forwards')
-                    print('Distance travelled: ', linear_distance)
-                    print('Front distance: ', self.front_dist) 
-            self.stopbot()  
+    def move_back(self, dist_limit):
+        self.speed(-speedchange)
 
+        while True:
+            rclpy.spin_once(self)
+            # self.get_logger().info('Working')
+            while self.laser_range.size==0 or math.isnan(self.laser_range[180]):   
+                rclpy.spin_once(self)
+                back_distance= self.laser_range[180]   
+            back_distance= self.laser_range[180] 
+            self.get_logger().info('Distance is %f ' % back_distance)
 
-    def back_intermediate(self):  #get the average back distance
-        back_dist_range= self.laser_range[back_angles]
-        #back_dist_range.remove(min(back_dist_range))
-        back_dist_range[back_dist_range==placeholder_value] = min(back_dist_range)
-        self.back_dist= sum(back_dist_range)/len(back_dist_range)
-
-    def move_back(self, stop_distance, travel_distance):
-        if self.laser_range.size != 0:
-            self.back_intermediate()
-            self.old_position = self.current_position #gets current position
-            linear_distance= 0.0
-        
-            while self.back_dist>stop_distance and linear_distance < travel_distance:
-                    rclpy.spin_once(self) # allow the callback functions to run
-                    self.back_intermediate()
-                    linear_distance = sqrt((self.current_position.x - self.old_position.x) ** 2 + (self.current_position.y - self.old_position.y) ** 2)
-                    self.speed(-speedchange) 
-                    print('Moving backwards')
-                    print('Back distance: ', self.back_dist)
-                    print('Distance travelled: ', linear_distance)
-            self.stopbot()    
-
+            if back_distance<dist_limit:
+                self.stopbot()
+                break
 
     def waiting_for_pickup(self):
         # time.sleep(2)
+        self.get_logger().info('Please pick the can up')
         while self.weight_placed:
             rclpy.spin_once(self)
-            print('Please pick the can up')
             # time.sleep(0.5)
-        print('Can has been removed')
-        time.sleep(3) #This allows for delay between can being removed and robot moving off, for safety
+        self.get_logger().info('Can has been removed')
+        time.sleep(2) #This allows for delay between can being removed and robot moving off, for safety
 
     def waiting_for_dropoff(self):
         # time.sleep(2)
+        self.get_logger().info("Waiting for can to drop")
         while not self.weight_placed:
             rclpy.spin_once(self)
-            print("Waiting for can to drop")
             # time.sleep(0.5)
-        print('Can has been dropped')
+        self.get_logger().info('Can has been dropped')
+        time.sleep(0.5)
 
 
     ############################################################
@@ -356,12 +344,12 @@ class AutoNav(Node):
     def table2(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
-            self.move_back(0.5) #distance from bucket 1
+            self.move_back(distance_to_stop) #distance from bucket 1
             self.rotatebot(90, right)
-            self.move_back(1.4) #distance from left wall
+            self.move_back(1.15) #distance from left wall
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.90) 
+            self.move_front(0.50) 
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
             self.docking()
@@ -370,12 +358,12 @@ class AutoNav(Node):
     def table3(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
-            self.move_back(0.6)
+            self.move_back(0.5)
             self.rotatebot(90, right)
-            self.move_back(1.4)
+            self.move_back(1.15)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.90)
+            self.move_front(0.50)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
             self.docking()
@@ -385,12 +373,12 @@ class AutoNav(Node):
     def table4(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
-            self.move_back(0.6)
-            self.rotatebot(90, right)
             self.move_back(0.5)
+            self.rotatebot(90, right)
+            self.move_back(0.42)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.9)
+            self.move_front(0.5)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
             self.docking()
@@ -399,56 +387,91 @@ class AutoNav(Node):
     def table5(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
-            self.move_back(1.75)
+            self.move_back(1.50)
             self.rotatebot(90, right)
-            self.move_back(0.5)
-            self.rotatebot(90, left)
-            self.move_front(0.70)
-            self.rotatebot(90, right)
-            self.move_back(0.55)
+            self.move_back(0.45)
             self.rotatebot(90, left)
             self.move_back(distance_to_stop)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.6)
+            self.move_front(0.5)
             self.rotatebot(90, right)
-            self.move_front(2.2)
+            self.move_front(0.5)
             self.rotatebot(90, left)
-            self.move_back(distance_to_stop)
-            self.rotatebot(90, right)
-            self.move_front(distance_to_stop)
-            self.rotatebot(90, left)
-            self.move_front(distance_to_stop_dock)
             self.docking()
 
     def table6(self):
+
+        def front():
+            rclpy.spin_once(self)
+            while self.laser_range.size==0 or math.isnan(self.laser_range[0]):   
+                rclpy.spin_once(self)
+                front_distance= self.laser_range[0]   
+            front_distance= self.laser_range[0] - 0.10#Lidar offset due to front carrier
+            return front_distance
+        
+
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
-            self.move_back(distance_to_stop)
-            self.rotatebot(90,right)
-            self.move_back(0.6)
-            self.rotatebot(90,left)
-            self.move_back(0.9)
-            self.rotatebot(90,left)
-
-            #### Code to find the table ###
-            if min(self.laser_range[back_angles])<2.0: #Stops in the event table is detected early, doesnt stop in middle of box
-                self.move_back(distance_to_stop)
-                self.waiting_for_pickup()
-                #Return back to docking station
-                self.move_front(distance_to_stop)
-
-            else:   # Else moves to middle of the square bounds
-                self.move_back(0.9)
-                self.waiting_for_pickup()
-                #Return back to docking station
-                self.move_front(distance_to_stop)
-            #######################################
-
-            self.rotatebot(90,right)
-            self.move_front(distance_to_stop)
+            self.move_back(0.25)
             self.rotatebot(90, right)
-            self.move_front(distance_to_stop)
+            self.move_back(0.42)
+            self.rotatebot(90, left)
+
+
+            if self.table_6_segment==0:
+            #### Code to find the table at the start###
+                self.move_back(1.2)
+                self.rotatebot(90,right)
+                print(front())
+                #Check all 3 segments
+                if front()<1.7:
+                    self.table_6_segment=1
+                    self.move_front(distance_to_stop)
+                    self.waiting_for_pickup()
+                else:
+                    self.rotatebot(90,left)
+                    self.move_back(0.9)
+                    self.rotatebot(90,right)
+
+                    if front()<1.7:
+                        self.table_6_segment=2
+                        self.move_front(distance_to_stop)
+                        self.waiting_for_pickup()
+
+                    else:
+                        self.table_6_segment=3
+                        self.rotatebot(90,left)
+                        self.move_back(0.6)
+                        self.rotatebot(90,right)
+                        self.move_front(distance_to_stop)
+                        self.waiting_for_pickup()
+            #############################################
+
+            elif self.table_6_segment==1:
+                self.move_back(1.2)
+                self.rotatebot(90,right)
+                self.move_front(distance_to_stop)
+                self.waiting_for_pickup()
+
+            elif self.table_6_segment==2:
+                self.move_back(0.9)
+                self.rotatebot(90,right)
+                self.move_front(distance_to_stop)
+                self.waiting_for_pickup()
+
+            elif self.table_6_segment==3:
+                self.move_back(0.6)
+                self.rotatebot(90,right)
+                self.move_front(distance_to_stop)
+                self.waiting_for_pickup()
+
+            #Segment to run after can has been picked up
+            self.move_back(0.42)
+            self.rotatebot(90, left)
+            self.move_front(0.3)
+            self.rotatebot(90, right)
+            self.move_front(0.5)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
             self.docking()
@@ -462,16 +485,16 @@ class AutoNav(Node):
             rclpy.spin_once(self)
 
             if self.line_direction=='b':
-                print('Dock: Moving forward')
+                self.get_logger().info('Dock: Moving forward')
                 self.speed(-0.03)
                 #self.speed(0.0)
             elif self.line_direction=='l':
-                print('Dock: Turning right')
+                self.get_logger().info('Dock: Turning right')
                 twist.linear.x = -0.01
                 twist.angular.z = -0.03
                 self.publisher_.publish(twist)
             elif self.line_direction=='r':
-                print('Dock: Turning left')
+                self.get_logger().info('Dock: Turning left')
                 twist.linear.x = -0.01
                 twist.angular.z = 0.03
                 self.publisher_.publish(twist)
@@ -479,17 +502,17 @@ class AutoNav(Node):
                 if flag == False:
                     self.speed(0.0)
                     self.rotatebot(90, right)
-                    self.move_front(0.5)
-                    self.rotatebot(135, left)
+                    self.move_front(0.3)
+                    self.rotatebot(110, left)
                     while self.line_direction=='n':
-                        print('Moving to docking position')
+                        self.get_logger().info('Moving to docking position')
                         rclpy.spin_once(self)
                         self.speed(-0.03)
-                        print(self.line_direction)
+                        self.get_logger().info(self.line_direction)
                     flag = True
-                    print('Exited')
+                    self.get_logger().info('Exited')
                 else: 
-                    print("Adjusting course")
+                    self.get_logger().info("Adjusting course")
                     twist.linear.x = -0.0
                     twist.angular.z = -0.02
                     self.publisher_.publish(twist)
@@ -498,7 +521,8 @@ class AutoNav(Node):
         #Stop robot once docked
         self.speed(0.0)
         self.chosen_table=0
-        print('Robot has docked')
+        self.get_logger().info('Robot has docked')
+        self.get_logger().info('Waiting for next input')
 
 
     def select_table(self):
@@ -510,7 +534,7 @@ class AutoNav(Node):
 
     def testing(self):
         self.move_back(0.2, 0.5)
-        print('next')
+        self.get_logger().info('next')
         self.move_back(0.2, 0.7)
 
 
@@ -521,18 +545,17 @@ class AutoNav(Node):
     def mover(self):
         try:
             self.stopbot()
+            self.get_logger().info('Waiting for next input')
 
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
-                print('Waiting for next input')
+
                 if self.chosen_table!=0:
-                    print('Table gotten')
+                    self.get_logger().info('Table gotten')
                     self.select_table()
-
-
                     
         except Exception as e:
-            print(e)
+            self.get_logger().info(e)
 
         finally:
             self.stopbot()
