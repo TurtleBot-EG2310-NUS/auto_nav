@@ -24,10 +24,8 @@ class MoveDistance(Node):
         self.old_position = current_position
 
     def run(self):
-        self.old_position = Point()
-        self.old_position.x = 0.0
-        self.old_position.y = 0.0
-        self.old_position.z = 0.0
+        self.old_position = self.current_position #gets current position
+        linear_distance= 0.0
 
         while rclpy.ok() and self.current_distance < self.distance:
             cmd_vel_msg = Twist()
@@ -42,7 +40,7 @@ class MoveDistance(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    move_distance = MoveDistance(distance=10.0)
+    move_distance = MoveDistance(distance=0.5)
     move_distance.run()
     rclpy.shutdown()
 

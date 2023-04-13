@@ -31,7 +31,7 @@ from geometry_msgs.msg import Point, Quaternion, Twist
 
 # constants
 rotatechange = 0.3
-speedchange = -0.1
+speedchange = -0.13
 occ_bins = [-1, 0, 100, 101]
 distance_to_stop = 0.20
 distance_to_stop_dock= 0.6
@@ -44,7 +44,6 @@ initial_weight_value= 0
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
 qos_policy = rclpy.qos.QoSProfile(reliability = rclpy.qos.ReliabilityPolicy.BEST_EFFORT, history = rclpy.qos.HistoryPolicy.KEEP_LAST, depth = 10)
-odom_distance = 0.0
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -337,7 +336,7 @@ class AutoNav(Node):
             self.move_back(distance_to_stop)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(distance_to_stop_dock)
+            self.move_front(distance_to_stop_dock - 0.1)
             self.docking()
 
     
@@ -373,12 +372,12 @@ class AutoNav(Node):
     def table4(self):
         if self.laser_range.size != 0:  #This line to ensure move_front will run first, before rotatebot as scan message has delay to be received
             self.waiting_for_dropoff()
-            self.move_back(0.5)
+            self.move_back(0.55)
             self.rotatebot(90, right)
             self.move_back(0.42)
             self.waiting_for_pickup()
             #Return back to docking station
-            self.move_front(0.5)
+            self.move_front(0.55)
             self.rotatebot(90, left)
             self.move_front(distance_to_stop_dock)
             self.docking()
@@ -480,42 +479,52 @@ class AutoNav(Node):
     def docking(self):
         twist= Twist()
         flag = False
+        old_line_dir = 'n'
         rclpy.spin_once(self)
-        while self.docked_yet!=True:
-            rclpy.spin_once(self)
+        rclpy.spin_once(self)
 
-            if self.line_direction=='b':
+        while self.docked_yet!=True:
+            self.get_logger().info(self.line_direction)
+            rclpy.spin_once(self)
+            if self.line_direction=='b' and old_line_dir != 'b':
+                flag = True
+                old_line_dir = 'b'
                 self.get_logger().info('Dock: Moving forward')
-                self.speed(-0.03)
+                self.speed(-0.05)
+                
                 #self.speed(0.0)
-            elif self.line_direction=='l':
+            elif self.line_direction=='r' and old_line_dir != 'r':
+                flag = True
+                old_line_dir = 'r'
                 self.get_logger().info('Dock: Turning right')
-                twist.linear.x = -0.01
-                twist.angular.z = -0.03
+                twist.linear.x = -0.02
+                twist.angular.z = -0.04
                 self.publisher_.publish(twist)
-            elif self.line_direction=='r':
+            elif self.line_direction=='l' and old_line_dir != 'l':
+                flag = True
+                old_line_dir = 'l'
                 self.get_logger().info('Dock: Turning left')
-                twist.linear.x = -0.01
-                twist.angular.z = 0.03
+                twist.linear.x = -0.02
+                twist.angular.z = 0.04
                 self.publisher_.publish(twist)
             else:
                 if flag == False:
                     self.speed(0.0)
                     self.rotatebot(90, right)
                     self.move_front(0.3)
-                    self.rotatebot(110, left)
+                    self.rotatebot(115, left)
                     while self.line_direction=='n':
                         self.get_logger().info('Moving to docking position')
                         rclpy.spin_once(self)
-                        self.speed(-0.03)
+                        self.speed(-0.02)
                         self.get_logger().info(self.line_direction)
                     flag = True
                     self.get_logger().info('Exited')
-                else: 
-                    self.get_logger().info("Adjusting course")
-                    twist.linear.x = -0.0
-                    twist.angular.z = -0.02
-                    self.publisher_.publish(twist)
+                # else: 
+                #     self.get_logger().info("Adjusting course")
+                #     twist.linear.x = -0.01
+                #     twist.angular.z = -0.02
+                #     self.publisher_.publish(twist)
 
                 
         #Stop robot once docked
@@ -549,10 +558,10 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
-
-                if self.chosen_table!=0:
-                    self.get_logger().info('Table gotten')
-                    self.select_table()
+                self.docking()
+                # if self.chosen_table!=0:
+                #     self.get_logger().info('Table gotten')
+                #     self.select_table()
                     
         except Exception as e:
             self.get_logger().info(e)
