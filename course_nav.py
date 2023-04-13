@@ -558,10 +558,10 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 rclpy.spin_once(self) # allow the callback functions to run
-                self.docking()
-                # if self.chosen_table!=0:
-                #     self.get_logger().info('Table gotten')
-                #     self.select_table()
+                # self.docking()
+                if self.chosen_table!=0:
+                    self.get_logger().info('Table gotten')
+                    self.select_table()
                     
         except Exception as e:
             self.get_logger().info(e)
